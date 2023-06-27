@@ -14,6 +14,8 @@ AJumpMarker::AJumpMarker()
 // Called when the game starts or when spawned
 void AJumpMarker::BeginPlay()
 {
+	this->SetActorHiddenInGame(false);
+	Marker->SetHiddenInGame(false);
 	Super::BeginPlay();
 	
 }

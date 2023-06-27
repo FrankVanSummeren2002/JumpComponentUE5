@@ -1,5 +1,3 @@
-
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -12,7 +10,7 @@ class CRYOFTHEFOX_API AJumpMarker : public AActor
 	GENERATED_BODY()
 
 	
-public:	
+public:
 	// Sets default values for this actor's properties
 	AJumpMarker();
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")

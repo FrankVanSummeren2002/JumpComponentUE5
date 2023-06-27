@@ -8,6 +8,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "DrawDebugHelpers.h"
 // Sets default values for this component's properties
 UJumpComponent::UJumpComponent()
 {
@@ -68,7 +69,7 @@ void  UJumpComponent::Jump()
 		IsLedgeJump = true;
 		FVector vel;
 		UGameplayStatics::SuggestProjectileVelocity_CustomArc(Owner, vel, Owner->GetActorLocation(), CalcJumpPos, 0.0f, GetArch());
-		Owner->LaunchCharacter(vel, true, false);
+		Owner->LaunchCharacter(vel * 1.4, true, false);
 		FVector dir = vel;
 		dir.Z = 0;
 
@@ -76,6 +77,8 @@ void  UJumpComponent::Jump()
 		rot.Roll = Owner->GetActorRotation().Roll;
 		Owner->SetActorRotation(rot);
 	}
+	else
+		Owner->LaunchCharacter(Owner->GetActorForwardVector() * FVector(500,500,0) + FVector(0,0,200), true, true);
 }
 void  UJumpComponent::Landed()
 {
@@ -118,7 +121,11 @@ void  UJumpComponent::PlaceMarker()
 		if (IsValid(aMarker))
 		{
 			aMarker->Marker->SetWorldLocation(CalcJumpPos);
-			aMarker->Marker->SetVisibility(true);
+			aMarker->Marker->SetVisibility(true); 
+		}
+		else
+		{
+			GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("Marker Invalid"));
 		}
 	}
 	else
@@ -141,7 +148,8 @@ bool UJumpComponent::FindJumpLocation(float angle, FVector& Location, FVector& N
 	while (firstIndex < FinalIndex)
 	{
 		FVector begin = TraceStartPosition();
-		FVector lastLocationRegistered = RotateLineTrace(begin + Owner->GetActorForwardVector() * HorizontalDistance, begin, angle);
+		FVector lastLocationRegistered;
+		lastLocationRegistered = RotateLineTrace(begin + Owner->GetActorForwardVector() * HorizontalDistance, begin, angle);
 		bool registeredHit = false;
 		for (int i = firstIndex; i < FinalIndex; i++)
 		{
@@ -151,7 +159,11 @@ bool UJumpComponent::FindJumpLocation(float angle, FVector& Location, FVector& N
 			//to make sure that we only look at the first found area
 			FVector end = lastLocationRegistered;
 			end.Z = start.Z;
-
+			if (this->DrawLines)
+			{
+				FColor Color = FColor::Red;
+				DrawDebugLine(GetWorld(), start, end, Color);
+			}
 			if (GetWorld()->LineTraceSingleByChannel(result, start, end, TraceChannel))
 			{
 				if (IsBlockingHit(result.GetComponent()))
@@ -175,7 +187,7 @@ bool UJumpComponent::FindJumpLocation(float angle, FVector& Location, FVector& N
 
 
 				//check if the area is walkable
-				if (!CheckOpenTop(firstEmptyLocation, end + VerticalOffset * -1, Location, Normal))
+				if (!CheckOpenTop(firstEmptyLocation, end + FVector(0,0,VerticalOffset * -1 - 10), Location, Normal))
 					return false;
 				//if the player has enough space to stand there and it is not a direct slope then jump has been found
 				if (IsAngleBigEnough(Normal, TraceNormal) && CanStandOnLocation(Location,Normal))
@@ -252,7 +264,8 @@ bool UJumpComponent::FindLocationDownWards(FVector Begin, FVector End, int Attem
 	bool cancelJump;
 	bool emptyTrace = false;
 
-	if (!TraceDown(currentLocation, direction, nextLocation, nextJumpLocation, Normal, cancelJump))
+	TraceDown(currentLocation, direction, nextLocation, nextJumpLocation, Normal, cancelJump);
+	if (cancelJump)
 		return false;
 
 	currentLocation = nextLocation;
@@ -293,8 +306,12 @@ bool UJumpComponent::TraceDown(FVector Begin, FVector Direction, FVector& NextLo
 {
 	CancelJump = false;
 	FHitResult result;
-	FVector End = Begin + DownDistance * -1.f;
-	
+	FVector End = Begin + FVector(0,0,DownDistance * -1.f);
+	if (this->DrawLines)
+	{
+		FColor Color = FColor::Red;
+		DrawDebugLine(GetWorld(), Begin, End, Color);
+	}
 	GetWorld()->LineTraceSingleByChannel(result, Begin, End, TraceChannel);
 
 	//make sure Direction doesnt have a z value and is normalized
@@ -324,12 +341,22 @@ bool UJumpComponent::CheckOpenTop(FVector FirstEmptyLocation, FVector LastLocati
 {
 	FHitResult result;
 	GetWorld()->LineTraceSingleByChannel(result, FirstEmptyLocation, LastLocation, TraceChannel);
-
+	if (this->DrawLines)
+	{
+		FColor Color = FColor::Red;
+		DrawDebugLine(GetWorld(), FirstEmptyLocation, LastLocation, Color);
+	}
 	//check if there is an object and check if you are allowed to be on top of it
 	if (!result.bBlockingHit)
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("No blocking hit"));
 		return false;
+	}
 	if (IsBlockingHit(result.GetComponent()))
+	{
+		
 		return false;
+	}
 
 	Location = result.Location;
 	Normal = result.Normal;
@@ -355,15 +382,17 @@ bool UJumpComponent::TraceForLines(FVector& Location, FVector& Normal)
 	//First try finding by the upwards traces only
 	if (FindJumpLocation(0.f, Location, Normal))
 		Found = true;
+	
 	if (FindJumpLocation(Angle, Location, Normal))
 		Found = true;
 	if (FindJumpLocation(Angle * -1.f, Location, Normal))
 		Found = true;
-
+	
 	if (Found)
 		return true;	
 
 	//if not found also try looking for the downwards traces
+	
 	FVector Begin, End;
 	int attempts;
 	GetHorizontalTraceBeginEnd(0.f, Begin, End, attempts);
@@ -395,8 +424,17 @@ bool UJumpComponent::FindDownWardsEdge(FVector Edge, FVector Previous, FVector& 
 	Previous.Z = Edge.Z;
 	FHitResult result;
 	//if the line trace doesn't find anything something went wrong
-	if (!GetWorld()->LineTraceSingleByChannel(result, Edge, Previous, TraceChannel))
+
+	if (this->DrawLines)
+	{
+		FColor Color = FColor::Red;
+		DrawDebugLine(GetWorld(), Edge, Previous, Color);
+	}
+	if (!GetWorld()->LineTraceSingleByChannel(result, Previous, Edge, ECC_WorldStatic))
+	{
+		GEngine->AddOnScreenDebugMessage(-1, 15.0f, FColor::Yellow, TEXT("no edge found"));
 		return false;
+	}
 	Location = result.Location;
 	Normal = result.Normal;
 	return !IsBlockingHit(result.Component.Get());
@@ -423,10 +461,14 @@ float UJumpComponent::GetArch()
 	FVector End = CalcJumpPos - FVector(0, 0, 5);
 
 	FHitResult result;
-	
+	if (this->DrawLines)
+	{
+		FColor Color = FColor::Red;
+		DrawDebugLine(GetWorld(), begin, End, Color);
+	}
 	if (GetWorld()->LineTraceSingleByChannel(result, begin, End, TraceChannel))
 		return -0.2 + ArchHeight;
 
 	
-	return FMath::Clamp(Owner->GetVelocity().Length() / 450.f, 0.f, 0.2f) + ArchHeight;
+	return FMath::Clamp(Owner->GetVelocity().Length() / 500.f, 0.f, 0.2f) + ArchHeight;
 }

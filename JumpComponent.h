@@ -96,6 +96,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
 		bool DrawCapsule = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Debug")
+		bool DrawLines = false;
 private:
 	//traces upwards to find a gap in the wall
 	//returns true if a place has been found where the player can actually stand
